@@ -1,0 +1,114 @@
+; Constants for AD9833
+AD9833_CMD_INIT  EQU 0x2100       ; Initialize with sine output
+AD9833_FREQ0     EQU 0x4000       ; Frequency register 0
+AD9833_FREQ1     EQU 0x8000       ; Frequency register 1
+AD9833_PHASE0    EQU 0xC000       ; Phase register 0
+AD9833_PHASE1    EQU 0xE000       ; Phase register 1
+
+; Define a frequency (example: 1 kHz assuming a 25 MHz MCLK)
+; Frequency value = (Freq / MCLK) * 2^28
+; For 1 kHz, Freq value = (1000 / 25000000) * 268435456 = 1074
+FREQ_LSB         EQU 0x0422       ; Lower 14 bits of frequency
+FREQ_MSB         EQU 0x0000       ; Upper 14 bits of frequency
+
+
+
+
+; Program Start
+START:
+    CALL    SPI_INIT            ; Initialize SPI interface
+
+    ; Reset the AD9833
+    LD      HL, AD9833_CMD_INIT
+    CALL    SPI_SEND            ; Send initialization command
+
+    ; Set frequency to 1 kHz
+    LD      HL, AD9833_FREQ0 | FREQ_LSB
+    CALL    SPI_SEND            ; Send lower part of frequency
+    LD      HL, AD9833_FREQ0 | FREQ_MSB
+    CALL    SPI_SEND            ; Send upper part of frequency
+
+    ; Activate the frequency
+    LD      HL, 0xC000          ; Activate command for frequency register 0
+    CALL    SPI_SEND
+
+    ; Further configurations or operations go here
+
+    ; Halt or loop
+HALT:
+    JP      HALT                ; End or loop to maintain state
+
+
+
+
+
+; SPI Control Subroutines
+; You need to define or include these based on your hardware setup
+; SPI_INIT        ; Initialize SPI ports and settings
+; SPI_SEND(data)  ; Send 16-bit data over SPI
+
+
+; Constants for I/O ports
+SPI_DATA_PORT    EQU 0x00    ; Placeholder for the data port
+SPI_CONTROL_PORT EQU 0x01    ; Placeholder for the control port
+
+; Bit definitions for control port
+SCK_BIT          EQU 0       ; Clock pin bit position
+MOSI_BIT         EQU 1       ; MOSI pin bit position
+CS_BIT           EQU 2       ; CS pin bit position
+
+; SPI initialization routine
+; SPI initialization routine
+SPI_INIT:
+    LD A, 0xFF      ; Set A to 11111111b assuming you want all control bits high initially
+    RES CS_BIT, A   ; Set CS to low to indicate the beginning of an operation (active low)
+    RES SCK_BIT, A  ; Ensure the clock starts low
+    OUT (SPI_CONTROL_PORT), A   ; Output the initial state to the SPI control port
+    SET CS_BIT, A   ; Set CS back to high (inactive)
+    OUT (SPI_CONTROL_PORT), A   ; Output the state to deactivate CS
+    RET
+
+
+; SPI send routine: sends a 16-bit word via SPI
+; HL register holds the data to send
+SPI_SEND:
+    PUSH BC
+    LD B, 16            ; Number of bits to send
+
+SEND_LOOP:
+    ; Set CS low to start transmission
+    RES CS_BIT, A       ; Set CS to low
+    OUT (SPI_CONTROL_PORT), A
+
+    ; Check the current bit to send; send MSB first
+    RL H                ; Rotate left through carry
+    JR NC, SEND_ZERO    ; If carry is 0, send zero
+
+    ; Send one
+    SET MOSI_BIT, A     ; Set MOSI to high
+    JR SEND_BIT
+
+SEND_ZERO:
+    ; Send zero
+    RES MOSI_BIT, A     ; Set MOSI to low
+
+SEND_BIT:
+    ; Toggle clock
+    SET SCK_BIT, A      ; Set SCK high
+    OUT (SPI_CONTROL_PORT), A
+    NOP                 ; Wait a little bit
+    RES SCK_BIT, A      ; Set SCK low
+    OUT (SPI_CONTROL_PORT), A
+
+    ; Next bit
+    DJNZ SEND_LOOP
+
+    ; Set CS high to end transmission
+    SET CS_BIT, A       ; Set CS to high
+    OUT (SPI_CONTROL_PORT), A
+
+    POP BC
+    RET
+
+; Your main program code continues from here...
+
