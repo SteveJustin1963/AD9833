@@ -34,11 +34,7 @@ START:
 
     ; Further configurations or operations go here
 
-    ; Halt or loop
-HALT:
-    JP      HALT                ; End or loop to maintain state
-
-
+ 
 
 
 
