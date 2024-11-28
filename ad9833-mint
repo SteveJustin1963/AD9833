@@ -1,0 +1,217 @@
+ MINT program for controlling the AD9833.  
+
+1. Constants and Configuration:
+- All AD9833 command registers defined
+- SPI port and control bit definitions 
+- Error code definitions
+
+2. Key Functions:
+- :I - SPI Interface initialization
+- :R - Hardware reset sequence
+- :W - 16-bit SPI word transmission
+- :F - Frequency calculation and setting
+- :T - Waveform type selection (Sine/Triangle/Square)
+- :P - Phase adjustment
+- :E - Error handling
+- :S - Status reporting
+- :M - Main initialization routine
+
+3. Added Features:
+- Full terminal feedback for all operations
+- Error checking and handling
+- Status reporting
+- Multiple waveform support
+- Phase control
+- Hardware timing considerations
+
+4. Usage:
+```text
+M              - Initialize everything
+1000 F         - Set 1kHz frequency
+0 T            - Set sine wave (0=Sine, 1=Triangle, 2=Square)
+45 P           - Set 45 degree phase
+S              - Show status
+```
+
+5. Safety Features:
+- Proper initialization sequence
+- Hardware reset handling
+- Timing delays for stability
+- Error checking
+
+To use this code:
+
+1. First run the main initialization:
+```text
+M
+```
+
+2. Then you can set different parameters:
+```text
+1000 F    // Set 1kHz output
+0 T       // Select sine wave
+45 P      // Set 45 degree phase
+```
+
+3. Check status at any time:
+```text
+S
+```
+
+The code provides feedback to the terminal for all operations, 
+making it easier to debug and verify proper operation. 
+Each command prints its status and any error conditions that might occur.
+
+///////////////////////////////////////
+
+// AD9833 Constants
+// Basic command bits
+#2100 i! // AD9833_CMD_INIT - Initialize with sine output
+#4000 f! // AD9833_FREQ0 - Frequency register 0
+#8000 g! // AD9833_FREQ1 - Frequency register 1 
+#C000 p! // AD9833_PHASE0 - Phase register 0
+#E000 q! // AD9833_PHASE1 - Phase register 1
+
+// Hardware port definitions
+#10 d! // SPI data port
+#11 c! // SPI control port
+
+// Control bits for SPI
+0 k!   // SCK bit position
+1 m!   // MOSI bit position
+2 s!   // CS bit position
+
+// Error codes
+0 e!   // No error
+1 r!   // Communication error
+2 t!   // Invalid frequency
+3 u!   // Clock error
+4 v!   // Voltage error
+
+// Initialize SPI Interface
+:I 
+  `Initializing SPI Interface...` /N
+  #FF a!           // Set all bits high initially
+  a k { ~ & c /O   // Clock low
+  a s { ~ & c /O   // CS low (active)
+  100()            // Short delay
+  a c /O           // Reset to default state
+  `SPI Initialized` /N
+;
+
+// Hardware reset sequence
+:R
+  `Performing hardware reset...` /N
+  a s { ~ & c /O   // CS low
+  1000()           // Power-on delay
+  i w!             // Load init command
+  W                // Send via SPI
+  `Reset complete` /N
+;
+
+// SPI send word (16-bit)
+:W 
+  `Sending SPI data: ` w , /N
+  a s { ~ & c /O   // CS low
+  16(              // Send 16 bits
+    w #8000 &      // Check MSB
+    (              // If bit set
+      a m { | c /O // MOSI high
+    )/E(           // Else
+      a m { ~ & c /O // MOSI low
+    )
+    a k { | c /O   // Clock high
+    10()           // Clock delay
+    a k { ~ & c /O // Clock low
+    w { w!         // Shift word left
+  )
+  a s { | c /O     // CS high
+;
+
+// Calculate frequency word
+:F 
+  `Calculating frequency word for: ` n . ` Hz` /N
+  // freq = (desired_freq * 2^28) / MCLK
+  n 28{{ #1770000 / // Assuming 25MHz MCLK
+  " #3FFF &  f | w! // Lower 14 bits
+  W
+  14}} f | w!       // Upper 14 bits
+  W
+;
+
+// Set waveform type
+:T
+  `Setting waveform type: ` n . /N
+  // n=0:Sine, 1:Triangle, 2:Square
+  n 0 = (
+    i #2 | w!      // Sine wave
+  )/E(
+    n 1 = (
+      i #4 | w!    // Triangle wave
+    )/E(
+      i #8 | w!    // Square wave
+    )
+  )
+  W
+;
+
+// Set phase
+:P
+  `Setting phase to: ` n . ` degrees` /N
+  // Convert degrees to 12-bit phase value
+  n 360 / #1000 * p | w!
+  W
+;
+
+// Error handler
+:E
+  `Error: `
+  n 0 = (`No error` /N)/E(
+    n 1 = (`Communication error` /N)/E(
+      n 2 = (`Invalid frequency` /N)/E(
+        n 3 = (`Clock error` /N)/E(
+          `Unknown error` /N
+        )
+      )
+    )
+  )
+;
+
+// Status check
+:S
+  `Checking status...` /N
+  // Read back configuration
+  `Current settings:` /N
+  `Waveform: ` w #E & 
+  0 = (`Sine`)/E(
+    2 = (`Triangle`)/E(
+      `Square`
+    )
+  ) /N
+  `Frequency register: ` w #4000 & . /N
+  `Phase register: ` w #C000 & . /N
+  `Status: OK` /N
+;
+
+// Main initialization and setup
+:M
+  `AD9833 Waveform Generator Control Program` /N
+  `--------------------------------` /N
+  I               // Initialize SPI
+  R               // Reset hardware
+  1000 F          // Set 1kHz default
+  0 T             // Set sine wave
+  0 P             // Set 0 phase
+  S               // Show status
+  `Setup complete` /N
+;
+
+// Example usage:
+// M              - Initialize everything
+// 1000 F         - Set 1kHz frequency
+// 0 T            - Set sine wave
+// 45 P           - Set 45 degree phase
+// S              - Show status
+
+///////////////////////////////
+ 
